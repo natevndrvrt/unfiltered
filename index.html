@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Unfiltered</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0a0a0b;
@@ -27,7 +27,7 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-family: 'Sinhala Sangam MN', 'Noto Sans', Geneva, sans-serif;
     font-size: 18px;
     min-height: 100vh;
     overflow-x: hidden;
@@ -221,7 +221,7 @@
   .streak-num {
     color: var(--orange);
     font-size: 22px;
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Sinhala Sangam MN', 'Noto Sans', Geneva, sans-serif;
     font-style: italic;
     font-weight: 300;
   }
@@ -273,10 +273,10 @@
   }
 
   .prompt-text {
-    font-size: 21px;
-    font-style: italic;
-    font-weight: 300;
-    line-height: 1.6;
+    font-size: 18px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.65;
     color: var(--text-bright);
     position: relative;
   }
@@ -289,10 +289,10 @@
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text-bright);
-    font-family: 'Cormorant Garamond', Georgia, serif;
-    font-size: 18px;
-    font-weight: 300;
-    line-height: 1.75;
+    font-family: 'Sinhala Sangam MN', 'Noto Sans', Geneva, sans-serif;
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 1.7;
     padding: 20px 24px;
     resize: vertical;
     min-height: 200px;
@@ -361,7 +361,7 @@
   }
 
   .already-logged-icon { font-size: 28px; margin-bottom: 10px; }
-  .already-logged-title { font-size: 20px; font-style: italic; color: var(--text-bright); margin-bottom: 6px; }
+  .already-logged-title { font-size: 18px; font-style: normal; color: var(--text-bright); margin-bottom: 6px; }
   .already-logged-text { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; line-height: 1.6; }
 
   /* ── Goals ── */
@@ -417,7 +417,7 @@
 
   input[type="text"], select {
     background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text-bright); font-family: 'Cormorant Garamond', Georgia, serif;
+    color: var(--text-bright); font-family: 'Sinhala Sangam MN', 'Noto Sans', Geneva, sans-serif;
     font-size: 16px; padding: 9px 12px; outline: none;
     transition: border-color 0.2s; flex: 1;
   }
@@ -450,7 +450,7 @@
     padding: 36px; max-width: 520px; width: 100%; margin: 20px;
   }
 
-  .modal-title { font-size: 22px; font-style: italic; font-weight: 300; color: var(--text-bright); margin-bottom: 6px; }
+  .modal-title { font-size: 20px; font-style: normal; font-weight: 400; color: var(--text-bright); margin-bottom: 6px; }
   .modal-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.15em; margin-bottom: 24px; }
   .modal-goal { font-size: 16px; font-weight: 300; color: var(--text); background: var(--surface2); border: 1px solid var(--border); padding: 14px 18px; margin-bottom: 18px; line-height: 1.5; }
   .modal-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -702,22 +702,74 @@ function setSyncStatus(state) {
   lbl.textContent = state === 'ok' ? 'synced' : state === 'saving' ? 'saving...' : state === 'error' ? 'sync error' : 'local only';
 }
 
-function signInGoogle() {
+function signInGoogle(silent) {
   if (!window.google) {
     showToast('Google API not loaded. Check connection.', 'var(--red)');
     return;
   }
+  const hint = localStorage.getItem('uf_google_hint') || '';
   const client = google.accounts.oauth2.initTokenClient({
     client_id: GDRIVE_CLIENT_ID,
     scope: GDRIVE_SCOPE,
+    hint: hint,
+    prompt: silent ? 'none' : '',
     callback: async (resp) => {
-      if (resp.error) { showToast('Sign-in failed.', 'var(--red)'); return; }
+      if (resp.error) {
+        if (silent) {
+          // Silent failed — show banner for manual sign-in
+          document.getElementById('authBanner').style.display = 'flex';
+        } else {
+          showToast('Sign-in failed.', 'var(--red)');
+        }
+        return;
+      }
       googleToken = resp.access_token;
+      // Store token expiry and hint
+      localStorage.setItem('uf_had_google', '1');
+      localStorage.setItem('uf_token_expiry', Date.now() + (resp.expires_in * 1000));
+      // Store account hint for silent re-auth
+      if (!hint) {
+        // Try to get email from token info
+        try {
+          const info = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + googleToken);
+          const d = await info.json();
+          if (d.email) localStorage.setItem('uf_google_hint', d.email);
+        } catch {}
+      }
       document.getElementById('authBanner').classList.add('hidden');
       await syncFromDrive();
     }
   });
   client.requestAccessToken();
+}
+
+function isTokenValid() {
+  const expiry = localStorage.getItem('uf_token_expiry');
+  if (!expiry) return false;
+  return Date.now() < (parseInt(expiry) - 60000); // 1 min buffer
+}
+
+async function ensureToken() {
+  if (googleToken && isTokenValid()) return true;
+  // Try silent refresh
+  return new Promise((resolve) => {
+    if (!window.google) { resolve(false); return; }
+    const hint = localStorage.getItem('uf_google_hint') || '';
+    if (!hint) { resolve(false); return; }
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GDRIVE_CLIENT_ID,
+      scope: GDRIVE_SCOPE,
+      hint: hint,
+      prompt: 'none',
+      callback: async (resp) => {
+        if (resp.error) { resolve(false); return; }
+        googleToken = resp.access_token;
+        localStorage.setItem('uf_token_expiry', Date.now() + (resp.expires_in * 1000));
+        resolve(true);
+      }
+    });
+    client.requestAccessToken();
+  });
 }
 
 async function driveRequest(method, url, body) {
@@ -801,7 +853,10 @@ async function syncFromDrive() {
 }
 
 async function pushToDrive() {
-  if (!googleToken) return;
+  const hadGoogle = localStorage.getItem('uf_had_google');
+  if (!hadGoogle) return;
+  const ok = await ensureToken();
+  if (!ok) { setSyncStatus('error'); return; }
   try {
     setSyncStatus('saving');
     await writeDriveFile(DATA);
@@ -1137,10 +1192,13 @@ async function init(){
   const gisScript = document.createElement('script');
   gisScript.src = 'https://accounts.google.com/gsi/client';
   gisScript.onload = () => {
-    // Check if we have a stored token hint
     const hadAuth = localStorage.getItem('uf_had_google');
-    if(!hadAuth){
-      document.getElementById('authBanner').style.display='flex';
+    const hint = localStorage.getItem('uf_google_hint');
+    if (hadAuth && hint) {
+      // Attempt silent token refresh automatically
+      signInGoogle(true);
+    } else {
+      document.getElementById('authBanner').style.display = 'flex';
     }
   };
   gisScript.onerror = () => {
