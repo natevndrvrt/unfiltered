@@ -949,7 +949,7 @@ ${typeInstruction}
 Return ONLY valid JSON: {"prompt":"Question here.","type":"reflective|creative|identity|tension|goals_capture|weekly_reflection|first_entry|forward_looking"}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
+    const res = await fetch('https://https://unfiltered-proxy.natevandervoort.workers.dev/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
